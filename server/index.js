@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const passport = require('passport');
 const cors = require('cors');
 const { emitLog } = require('./utils/logger');
@@ -20,15 +20,9 @@ app.use(cors({
 }));
 
 app.use(
-    session({
-        secret: process.env.COOKIE_KEY || 'your-secret-key',
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            maxAge: 30 * 24 * 60 * 60 * 1000,
-            httpOnly: true,
-            secure: false // Set to true if using HTTPS
-        }
+    cookieSession({
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        keys: [process.env.COOKIE_KEY]
     })
 );
 // #region agent log
