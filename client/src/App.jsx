@@ -24,11 +24,11 @@ function App() {
 
   const handleLogin = () => {
     // Redirect to backend auth route
-    window.location.href = 'http://localhost:5000/auth/google';
+    window.location.href = '/auth/google';
   };
 
   const handleLogout = () => {
-    window.location.href = 'http://localhost:5000/api/logout';
+    window.location.href = '/api/logout';
   };
 
   return (

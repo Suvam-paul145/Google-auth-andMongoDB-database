@@ -1,0 +1,22 @@
+{
+    "name": "google-auth-app",
+    "version": "1.0.0",
+    "engines": {
+        "node": "18.x"
+    },
+    "scripts": {
+        "install-client": "npm install --prefix client",
+        "build-client": "npm run build --prefix client",
+        "build": "npm run install-client && npm run build-client",
+        "start": "node server/index.js"
+    },
+    "dependencies": {
+        "cookie-session": "^2.0.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "mongoose": "^8.0.3",
+        "passport": "^0.7.0",
+        "passport-google-oauth20": "^2.0.0"
+    }
+}
