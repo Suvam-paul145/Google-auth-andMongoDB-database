@@ -15,36 +15,36 @@ module.exports = app => {
             // Set a timeout for the auth callback
             const authTimeout = setTimeout(() => {
                 console.error('Auth callback timeout after 25 seconds');
-                return res.status(504).json({ 
+                return res.status(504).json({
                     error: 'Authentication timeout. Please try again.',
-                    retry: true 
+                    retry: true
                 });
             }, 25000); // 25 seconds before Vercel's 300s timeout
 
             passport.authenticate('google', { session: true }, (err, user, info) => {
                 clearTimeout(authTimeout);
-                
+
                 if (err) {
                     console.error('Passport auth error:', err.message);
-                    return res.status(500).json({ 
+                    return res.status(500).json({
                         error: 'Authentication failed',
-                        details: err.message 
+                        details: err.message
                     });
                 }
-                
+
                 if (!user) {
                     console.warn('No user returned from auth');
-                    return res.status(401).json({ 
+                    return res.status(401).json({
                         error: 'Authentication failed',
-                        info 
+                        info
                     });
                 }
 
                 req.login(user, (loginErr) => {
                     if (loginErr) {
                         console.error('Session login error:', loginErr.message);
-                        return res.status(500).json({ 
-                            error: 'Session creation failed' 
+                        return res.status(500).json({
+                            error: 'Session creation failed'
                         });
                     }
 
@@ -58,9 +58,15 @@ module.exports = app => {
                             success: true
                         }
                     });
-                    
+
                     // Redirect to frontend dashboard
-                    res.redirect('http://localhost:5173/dashboard');
+                    // In production (Vercel), we use relative path to stay on same domain
+                    // In development (Local), we must redirect explicitly to the Vite client port (5173) because the server (5000) can't serve the frontend
+                    const clientRedirect = process.env.NODE_ENV === 'production'
+                        ? '/dashboard'
+                        : 'http://localhost:5173/dashboard';
+
+                    res.redirect(clientRedirect);
                 });
             })(req, res, next);
         }
@@ -69,7 +75,10 @@ module.exports = app => {
     app.get('/api/logout', (req, res, next) => {
         req.logout((err) => {
             if (err) { return next(err); }
-            res.redirect('http://localhost:5173/');
+            const clientRedirect = process.env.NODE_ENV === 'production'
+                ? '/'
+                : 'http://localhost:5173/';
+            res.redirect(clientRedirect);
         });
     });
 
