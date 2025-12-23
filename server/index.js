@@ -55,6 +55,22 @@ app.use(
         keys: [process.env.COOKIE_KEY]
     })
 );
+// #region session polyfill
+app.use((req, res, next) => {
+    if (req.session && !req.session.regenerate) {
+        req.session.regenerate = (cb) => {
+            cb();
+        };
+    }
+    if (req.session && !req.session.save) {
+        req.session.save = (cb) => {
+            cb();
+        };
+    }
+    next();
+});
+// #endregion
+
 // #region agent log
 app.use((req, _res, next) => {
     emitLog({
