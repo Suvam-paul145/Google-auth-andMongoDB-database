@@ -11,24 +11,58 @@ module.exports = app => {
 
     app.get(
         '/auth/google/callback',
-        passport.authenticate('google'),
-        (req, res) => {
-            // #region agent log
-            emitLog({
-                hypothesisId: 'H1',
-                location: 'server/routes/authRoutes.js:google-callback',
-                message: 'Post-auth callback session/user state',
-                data: {
-                    hasSession: !!req.session,
-                    hasRegenerate: !!(req.session && req.session.regenerate),
-                    hasSave: !!(req.session && req.session.save),
-                    sessionKeys: req.session ? Object.keys(req.session) : [],
-                    userId: req.user ? req.user.id : null
+        (req, res, next) => {
+            // Set a timeout for the auth callback
+            const authTimeout = setTimeout(() => {
+                console.error('Auth callback timeout after 25 seconds');
+                return res.status(504).json({ 
+                    error: 'Authentication timeout. Please try again.',
+                    retry: true 
+                });
+            }, 25000); // 25 seconds before Vercel's 300s timeout
+
+            passport.authenticate('google', { session: true }, (err, user, info) => {
+                clearTimeout(authTimeout);
+                
+                if (err) {
+                    console.error('Passport auth error:', err.message);
+                    return res.status(500).json({ 
+                        error: 'Authentication failed',
+                        details: err.message 
+                    });
                 }
-            });
-            // #endregion
-            // Redirect to frontend dashboard or home
-            res.redirect('http://localhost:5173/dashboard');
+                
+                if (!user) {
+                    console.warn('No user returned from auth');
+                    return res.status(401).json({ 
+                        error: 'Authentication failed',
+                        info 
+                    });
+                }
+
+                req.login(user, (loginErr) => {
+                    if (loginErr) {
+                        console.error('Session login error:', loginErr.message);
+                        return res.status(500).json({ 
+                            error: 'Session creation failed' 
+                        });
+                    }
+
+                    emitLog({
+                        hypothesisId: 'H1',
+                        location: 'server/routes/authRoutes.js:google-callback',
+                        message: 'Post-auth callback session/user state',
+                        data: {
+                            hasSession: !!req.session,
+                            userId: req.user ? req.user.id : null,
+                            success: true
+                        }
+                    });
+                    
+                    // Redirect to frontend dashboard
+                    res.redirect('http://localhost:5173/dashboard');
+                });
+            })(req, res, next);
         }
     );
 

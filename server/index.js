@@ -8,9 +8,38 @@ require('dotenv').config();
 require('./models/User');
 require('./services/passport');
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('MongoDB connected'))
-    .catch(err => console.error('MongoDB connection error:', err));
+// MongoDB connection with proper timeout handling
+let isMongoConnected = false;
+let mongoConnectPromise = null;
+
+const connectMongoDB = async () => {
+    if (isMongoConnected) return;
+    if (mongoConnectPromise) return mongoConnectPromise;
+
+    mongoConnectPromise = mongoose.connect(process.env.MONGO_URI, {
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 10000,
+        maxPoolSize: 10,
+        minPoolSize: 5,
+        retryWrites: true,
+        w: 'majority'
+    })
+        .then(() => {
+            console.log('MongoDB connected');
+            isMongoConnected = true;
+            return true;
+        })
+        .catch(err => {
+            console.error('MongoDB connection error:', err.message);
+            mongoConnectPromise = null;
+            throw err;
+        });
+
+    return mongoConnectPromise;
+};
+
+// Initial connection attempt (non-blocking)
+connectMongoDB().catch(err => console.log('Initial MongoDB connection attempt failed:', err.message));
 
 const app = express();
 app.set('trust proxy', 1);
@@ -44,6 +73,22 @@ app.use((req, _res, next) => {
     next();
 });
 // #endregion
+// Ensure MongoDB is connected before processing critical requests
+app.use(async (req, res, next) => {
+    // Skip connection check for non-auth routes
+    if (req.path === '/api/current_user' || req.path.includes('/auth/')) {
+        try {
+            if (!isMongoConnected) {
+                await connectMongoDB();
+            }
+        } catch (error) {
+            console.error('MongoDB connection check failed:', error.message);
+            return res.status(503).json({ error: 'Database connection unavailable' });
+        }
+    }
+    next();
+});
+
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -56,4 +101,6 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
+// Export helper for serverless environment
 module.exports = app;
+module.exports.connectMongoDB = connectMongoDB;

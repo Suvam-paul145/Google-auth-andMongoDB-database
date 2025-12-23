@@ -5,14 +5,27 @@ const { emitLog } = require('../utils/logger');
 
 const User = mongoose.model('users');
 
+// Increase timeout for operations
+const OPERATION_TIMEOUT = 8000; // 8 seconds
+
 passport.serializeUser((user, done) => {
     done(null, user.id);
 });
 
 passport.deserializeUser((id, done) => {
-    User.findById(id).then(user => {
-        done(null, user);
-    });
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Deserialize timeout')), OPERATION_TIMEOUT)
+    );
+    
+    Promise.race([
+        User.findById(id),
+        timeoutPromise
+    ])
+        .then(user => done(null, user))
+        .catch(err => {
+            console.error('Deserialize error:', err.message);
+            done(null, null);
+        });
 });
 
 passport.use(
@@ -24,34 +37,52 @@ passport.use(
             proxy: true
         },
         async (accessToken, refreshToken, profile, done) => {
-            const existingUser = await User.findOne({ googleId: profile.id });
+            try {
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('FindOne timeout')), OPERATION_TIMEOUT)
+                );
+                
+                const existingUser = await Promise.race([
+                    User.findOne({ googleId: profile.id }),
+                    timeoutPromise
+                ]);
 
-            if (existingUser) {
-                // #region agent log
+                if (existingUser) {
+                    emitLog({
+                        hypothesisId: 'H2',
+                        location: 'server/services/passport.js:verify',
+                        message: 'Existing user found',
+                        data: { userId: existingUser.id }
+                    });
+                    return done(null, existingUser);
+                }
+
+                const user = await Promise.race([
+                    new User({
+                        googleId: profile.id,
+                        displayName: profile.displayName,
+                        email: profile.emails[0].value
+                    }).save(),
+                    timeoutPromise
+                ]);
+                
                 emitLog({
                     hypothesisId: 'H2',
                     location: 'server/services/passport.js:verify',
-                    message: 'Existing user found',
-                    data: { userId: existingUser.id }
+                    message: 'New user created',
+                    data: { userId: user.id }
                 });
-                // #endregion
-                return done(null, existingUser);
+                done(null, user);
+            } catch (err) {
+                console.error('Google auth error:', err.message);
+                emitLog({
+                    hypothesisId: 'H2',
+                    location: 'server/services/passport.js:verify',
+                    message: 'Google auth error',
+                    data: { error: err.message }
+                });
+                done(err);
             }
-
-            const user = await new User({
-                googleId: profile.id,
-                displayName: profile.displayName,
-                email: profile.emails[0].value
-            }).save();
-            // #region agent log
-            emitLog({
-                hypothesisId: 'H2',
-                location: 'server/services/passport.js:verify',
-                message: 'New user created',
-                data: { userId: user.id }
-            });
-            // #endregion
-            done(null, user);
         }
     )
 );
